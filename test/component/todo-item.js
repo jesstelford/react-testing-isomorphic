@@ -8,36 +8,58 @@ var React = require('react/addons'),
 
 describe('Todo-item component', function(){
 
-  before('render and locate element', function() {
+  before('setup DOM', function() {
 
-    // Create our component
-    var component = TodoItemFactory({
-      done: false,
-      name: 'Write Tutorial'
+    this.isomorphicInputElement = document.getElementsByTagName('input')[0]
+
+    // Simulate a click on the DOM element to check the checkbox
+    this.isomorphicInputElement.checked = true;
+  });
+
+  it('is checked before React mount', function() {
+    assert(this.isomorphicInputElement.checked === true);
+  });
+
+  describe('after React mount, <input>', function() {
+
+    before('mount React', function() {
+
+      // Create our component
+      // Note that the state here and the state server side (when rendering the
+      // isomorphic HTML) must match. This ensures the HTML React searches for
+      // matches the HTML we have given to jsdom
+      this.component = TodoItemFactory({
+        done: false,
+        name: 'Write Tutorial'
+      });
+
+      // We want to render into the <body> tag
+      this.renderTarget = document.getElementsByTagName('body')[0];
+
+      // Now, render
+      this.renderedComponent = React.render(this.component, this.renderTarget);
+
+      // Searching for <input> tag within rendered React component
+      // Throws an exception if not found
+      this.inputComponent = TestUtils.findRenderedDOMComponentWithTag(
+        this.renderedComponent,
+        'input'
+      );
+
+      this.inputElement = this.inputComponent.getDOMNode();
     });
 
-    // We want to render into the <body> tag
-    var renderTarget = document.getElementsByTagName('body')[0];
+    it('should be checked', function() {
+      assert(this.inputElement.checked === true);
+    });
 
-    var renderedComponent = React.render(component, renderTarget);
+    it('should be identical DOM element', function() {
+      assert(this.inputElement === this.isomorphicInputElement);
+    });
 
-    // Searching for <input> tag within rendered React component
-    // Throws an exception if not found
-    var inputComponent = TestUtils.findRenderedDOMComponentWithTag(
-      renderedComponent,
-      'input'
-    );
-
-    this.inputElement = inputComponent.getDOMNode();
+    it('has checked state', function() {
+      assert(this.renderedComponent.state.done === true);
+    });
 
   });
-
-  it('<input> should be of type "checkbox"', function() {
-    assert(this.inputElement.getAttribute('type') === 'checkbox');
-  });
-
-  it('<input> should not be checked', function() {
-    assert(this.inputElement.checked === false);
-  });
-
-})
+});
