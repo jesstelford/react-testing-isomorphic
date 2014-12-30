@@ -1,8 +1,8 @@
 {
-  "name": "react-testing-mocha-jsdom",
+  "name": "react-testing-isomorphic",
   "private": true,
   "version": "1.0.0",
-  "description": "Unit testing React with Mocha and jsdom",
+  "description": "Unit testing Isomorphic React Components",
   "scripts": {
     "test": "./node_modules/.bin/mocha --recursive",
     "jsx": "./node_modules/.bin/jsx common/components/ lib/components/"
