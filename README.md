@@ -1,37 +1,46 @@
-*This is __Part 2__ of the series* "Modular Isomorphic React JS applications".
-*See [Part 1 here](https://github.com/jesstelford/react-isomorphic-boilerplate)*
+*This is __Part 3__ of the series* "Modular Isomorphic React JS applications".
+*See [Part 1](https://github.com/jesstelford/react-isomorphic-boilerplate) and
+[Part 2](https://github.com/jesstelford/react-testing-mocha-jsdom) for more.*
 
-# Unit testing React Components with Mocha + jsdom
+# Unit testing Isomorphic React Components
 
-**tl;dr**: Jest can be replaced with Mocha + jsdom for unit testing headlessly
-in node/io.js, keeping open the option for future tooling changes. Modularity
-FTW!
+**tl;dr**: *Isomorphic rendering with forms can be a painful combination. React
+has us covered with `refs` and `componentDidMount()`, but we still need to unit
+test those solutions.*
 
-Unit testing [React](https://facebook.github.io/react) is traditionally done
-using [Jest](https://facebook.github.io/jest) which dictates the use of the
-Jasmine testing framework, and enforces mocking of all `require` calls. For such
-an unopinionated rendering engine, this is a very opinionated setup, resulting
-in issues such as overly-verbose unmocking of requires, and being tied into
-Jasmine's limited framework.
+As we learned in [Part
+1](https://github.com/jesstelford/react-isomorphic-boilerplate), React is really
+powerful when used to build Isomorphic applications. Unfotunately, it has a
+[gotchya](https://github.com/jesstelford/react-isomorphic-boilerplate#state-change-and-slow-loading-javascript)
+when dealing with state change and slow loading Javascript:
 
-The [Mocha](http://mochajs.org/) testing framework is a simple, fast, and
-async-friendly testing framework with its own test runner built in. We can
-choose our own Assertion handlers ([Chai](http://chaijs.com/),
-[better-assert](https://github.com/tj/better-assert), etc), and mocking
-frameworks ([Sinon](http://sinonjs.org/), etc).
+> When the user is on a slow connection (mobile, for example), the
+> `public/js/bundle.js` script file may take some time to download. During this
+> time, the user is already presented with the form and can begin interacting
+> with the checkbox.
+>
+> Unfortunately, if the user toggles the checkbox to `checked`, when React
+> renders the DOM, it will not detect the changed state, instead using the
+> passed in state as the source of truth (as it rightly should).
 
-[jsdom](https://github.com/tmpvar/jsdom) provides React the required DOM to
-render to, implementing a suitable subset of browser's DOM implementations
-entirely in node/io.js.
+As pointed out further in the tutorial, we can use
+[`refs`](https://facebook.github.io/react/docs/more-about-refs.html) and
+[`componentDidMount()`](https://facebook.github.io/react/docs/component-specs.html#mounting-componentdidmount)
+to mitigate the effects, and update the state as soon as React is done browser
+side rendering.
 
-With these three tools combined, unit testing react components becomes easier,
-and with less vendor-lock for future changes (we can swap out jsdom for some
-other implementation in the future, etc).
+But, we still need to test this aspect (our Mobile Users need to have the best
+possible experience too!)
+
+Continuing on from [Part
+2](https://github.com/jesstelford/react-testing-mocha-jsdom), we will use
+[Mocha](http://mochajs.org/) + [jsdom](https://github.com/tmpvar/jsdom) to build
+out test cases for covering this sutation.
 
 ## Let's do it
 
-**tl;dr**: [Get the completed
-example](https://github.com/jesstelford/react-testing-mocha-jsdom)
+**tl;dr**: *[Get the completed
+example](https://github.com/jesstelford/react-testing-isormorphic)*
 
 We'll be using these libraries:
 
@@ -64,57 +73,83 @@ var React = require('react');
 module.exports = React.createClass({
   displayName: 'TodoItem',
 
+  /**
+   * Lifecycle functions
+   **/
   getInitialState: function() {
     return { done: this.props.done }
+  },
+
+  componentDidMount: function() {
+    this.setDone(this.refs.done.getDOMNode().checked);
   },
 
   render: function() {
     return (
       <label>
-        <input type="checkbox" defaultChecked={this.state.done} />
+        <input ref="done" type="checkbox" defaultChecked={this.state.done} onChange={this.onChange} />
         {this.props.name}
       </label>
     );
+  },
+
+  /**
+   * Event handlers
+   **/
+  onChange: function(event) {
+    this.setDone(event.target.checked);
+  },
+
+  /**
+   * Utilities
+   **/
+  setDone: function(done) {
+    this.setState({ done: !!done});
   }
 });
 ```
 
+*Notice our use of `componentDidMount()` on line 14, and our use of `refs` on
+lines 15 & 21*
+
 Since this component contains JSX, we must build it before we can use it by
-executing `npm run jsx`. This will save the built file into
-`lib/components/todo-item.js`
+executing `./node_modules/.bin/jsx common/components/ lib/components/` (also
+executable via `npm run jsx` in the example repo). This will save the built file
+into `lib/components/todo-item.js`
 
 ### jsdom
 
-Setting up jsdom ^2.0.0 can be acheived in a couple of lines:
+Previously, we setup jsdom with a simple DOM consisting of an empty `<body>`,
+this time we want to set it up to mimic what our isomorphic server would have
+rendered. We can see from [Part
+1](https://github.com/jesstelford/react-isomorphic-boilerplate#server-side-rendering),
+that it looks like this (thanks to `React.renderToString()`):
+
+```html
+<label data-reactid=".e8wbttvlkw" data-react-checksum="-1336527625"><input type="checkbox" data-reactid=".e8wbttvlkw.0"><span data-reactid=".e8wbttvlkw.1">Write Tutorial</span></label>
+```
+
+*Remember: [space is important](https://github.com/jesstelford/react-isomorphic-boilerplate#space-is-important), don't prettify the HTML!*
+
+This gives us a final `test/setup.js` file like:
 
 ```javascript
 // file: test/setup.js
 var jsdom = require('jsdom');
 
-// A super simple DOM ready for React to render into
+// Simulating a server-side rendered component
+// This was obtained via React.renderToString()
 // Store this DOM and the window in global scope ready for React to access
-global.document = jsdom.jsdom('<!doctype html><html><body></body></html>');
+global.document = jsdom.jsdom('<!doctype html><html><body><label data-reactid=".e8wbttvlkw" data-react-checksum="-1336527625"><input type="checkbox" data-reactid=".e8wbttvlkw.0"><span data-reactid=".e8wbttvlkw.1">Write Tutorial</span></label></body></html>');
 global.window = document.parentWindow;
 ```
 
-We are emulating a browser environment here by setting the global variables
-`document` and `window` as created by `jsdom`. This later allows React to render
-into the `document`, and utilize functions existing on `window` such as
-`onScroll`.
-
-The HTML passed into
-[`jsdom.jsdom(...)`](https://github.com/tmpvar/jsdom#for-the-hardcore-jsdomjsdom)
-is a very simple document, and can be simplified further to `<body></body>` if
-you wish. I have kept the `<!doctype html><html>...</html>` tags to future proof
-against a time when `jsdom` can distinguish between HTML5 and older DOM models.
-
 ### A Mocha Test
 
-**tl;dr**: Get the completed test file in the example repo at
-[test/component/todo-item.js](https://github.com/jesstelford/react-testing-mocha-jsdom/blob/master/test/component/todo-item.js)
+**tl;dr**: *Get the completed test file in the example repo at
+[test/component/todo-item.js](https://github.com/jesstelford/react-testing-isormorphic/blob/master/test/component/todo-item.js)*
 
-Let's begin with scaffolding our tests, to figure out what we are aiming for in
-terms of test setup and teardown:
+Using a similar approach to our tests in [Part 2](https://github.com/jesstelford/react-testing-mocha-jsdom#a-mocha-test), we start with what we want to test:
 
 ```javascript
 // file: test/component/todo-item.js
@@ -122,20 +157,32 @@ var assert = require('assert');
 
 describe('Todo-item component', function(){
 
-  it('<input> should be of type "checkbox"', function() {
-    assert(this.inputElement.getAttribute('type') === 'checkbox');
+  it('is checked before React mount', function() {
+    assert(this.isomorphicInputElement.checked === true);
+  });
+
+  describe('after React mount, <input>', function() {
+
+    it('should be checked', function() {
+      assert(this.inputElement.checked === true);
+    });
+
+    it('should be identical DOM element', function() {
+      assert(this.inputElement === this.isomorphicInputElement);
+    });
+
+    it('has checked state', function() {
+      assert(this.renderedComponent.state.done === true);
+    });
+
   });
 
 });
 ```
 
-First up, how do we get access to `this.inputElement`? React provides a nice set
-of [`TestUtils`](https://facebook.github.io/react/docs/test-utils.html) to allow
-searching for such an element, the most useful for us being
-[`findRenderedDOMComponentWithTag()`](https://facebook.github.io/react/docs/test-utils.html#findrendereddomcomponentwithtag).
-
-We can do this in one of Mocha's `before` methods, executed before all the
-tests:
+Let's start with getting access to `this.isomorphicInputElement`. jsdom has us
+covered here, as we've setup the global `document` in `test/setup.js`, allowing
+us to query it with `getElementsByTagName`:
 
 ```javascript
 // file: test/component/todo-item.js
@@ -143,35 +190,24 @@ var assert = require('assert');
 
 describe('Todo-item component', function(){
 
-  before('render and locate element', function() {
+  before('setup DOM', function() {
 
-    var renderedComponent = React.render(component, renderTarget);
-
-    // Searching for <input> tag within rendered React component
-    // Throws an exception if not found
-    var inputComponent = TestUtils.findRenderedDOMComponentWithTag(
-      renderedComponent,
-      'input'
-    );
-
-    this.inputElement = inputComponent.getDOMNode();
+    this.isomorphicInputElement = document.getElementsByTagName('input')[0]
 
   });
 
-  it( /* [...] */ )
-
+  // [...]
 });
 ```
 
-Now, we have extracted the DOM Node (`this.inputElement`) from the rendered
-React component (`renderedComponent`) using React's `getDOMNode()` method.
+#### Mimicing slow loading JS
 
-`component` is the regularly Factory-built React component (see [Part
-1](https://github.com/jesstelford/react-isomorphic-boilerplate#browser-side-rendering)
-for more).
+You'll notice in our first test, we are asserting `.checked === true`, but keep
+in mind when we generated the static html, the component's state is `done:
+false`.
 
-`renderTarget` is where jsdom comes in, allowing us to access the `document`
-object as if we were in a browser!
+This is where we simulate a user having access to the DOM before the JS has
+finished downloading; We *check* the checkbox:
 
 ```javascript
 // file: test/component/todo-item.js
@@ -179,17 +215,139 @@ var assert = require('assert');
 
 describe('Todo-item component', function(){
 
-  before('render and locate element', function() {
+  before('setup DOM', function() {
 
-    // We want to render into the <body> tag
-    var renderTarget = document.getElementsByTagName('body')[0];
+    this.isomorphicInputElement = document.getElementsByTagName('input')[0]
 
+    // Simulate a click on the DOM element to check the checkbox
+    this.isomorphicInputElement.checked = true;
+
+  });
+
+  // [...]
+});
+```
+
+This allows our first test to run successfully; `npm test` should give output
+similar to:
+
+```
+  Todo-item component
+    ✓ is checked before React mount 
+    after React mount, <input>
+      1) should be checked
+      2) has checked state
+      3) should be identical DOM element
+
+
+  1 passing (11ms)
+  3 failing
+
+  1) Todo-item component after React mount, <input> should be checked:
+     TypeError: Cannot read property 'checked' of undefined
+
+  2) Todo-item component after React mount, <input> has checked state:
+     TypeError: Cannot read property 'state' of undefined
+
+  3) Todo-item component after React mount, <input> should be identical DOM element:
+     AssertionError: false == true
+```
+
+So far, so good!
+
+#### Rendering React browser side
+
+We use an almost identical pattern as we did in [Part
+2](https://github.com/jesstelford/react-testing-mocha-jsdom#a-mocha-test) (with
+some different variable names) to setup the rendering for React browser side (in
+`before('mount React', function() {`):
+
+```javascript
+// file: test/component/todo-item.js
+var assert = require('assert');
+
+describe('Todo-item component', function(){
+
+  before('setup DOM', function() {
     // [...]
-
   });
 
-  it( /* [...] */ )
+  it(/* [...] */)
+
+  describe('after React mount, <input>', function() {
+
+    before('mount React', function() {
+
+      // Create our component
+      // Note that the state here and the state server side (when rendering the
+      // isomorphic HTML) must match. This ensures the HTML React searches for
+      // matches the HTML we have given to jsdom
+      this.component = TodoItemFactory({
+        done: false,
+        name: 'Write Tutorial'
+      });
+
+      // We want to render into the <body> tag
+      this.renderTarget = document.getElementsByTagName('body')[0];
+
+      // Now, render
+      this.renderedComponent = React.render(this.component, this.renderTarget);
+
+      // Searching for <input> tag within rendered React component
+      // Throws an exception if not found
+      this.inputComponent = TestUtils.findRenderedDOMComponentWithTag(
+        this.renderedComponent,
+        'input'
+      );
+
+      this.inputElement = this.inputComponent.getDOMNode();
+    });
+
+    it(/* [...] */)
+
+  });
+});
 ```
+
+With this, we are rendering React into the same `renderTarget` as the server
+side isomorphic render (the `<body>` tag). We then search for the `<input>` tag
+using React's `TestUtils` and store the found components in
+`this.renderedComponent` / `this.inputComponent` / `this.inputElement` ready for
+our tests to assert against.
+
+#### React's smart Virtual DOM
+
+React is smart enough (thanks to its Virtual DOM) to not wipe out our
+isomorphically rendered DOM element, allowing the next two tests to pass:
+
+```javascript
+it('should be checked', function() {
+  assert(this.inputElement.checked === true);
+});
+
+it('should be identical DOM element', function() {
+  assert(this.inputElement === this.isomorphicInputElement);
+});
+```
+
+And, we can assert that our code in `componentDidMount()` was successfully
+executed by checking on the state:
+
+```javascript
+it('has checked state', function() {
+  assert(this.renderedComponent.state.done === true);
+});
+```
+
+#### Conclusions
+
+With all 4 of these tests executed, we have asserted that:
+
+ * The isomorphic rendered checkbox can be `checked` before the React JS has
+   loaded and executed
+ * Once the React JS is loaded and executed;
+   * The DOM element is **not** erased
+   * The React component's state is correctly updated
 
 All together now, and we end up with a complete test that can be run with
 `./node_modules/.bin/mocha --recursive` (alternatively can be run as `npm test`
@@ -207,38 +365,61 @@ var React = require('react/addons'),
 
 describe('Todo-item component', function(){
 
-  before('render and locate element', function() {
+  before('setup DOM', function() {
 
-    // Create our component
-    var component = TodoItemFactory({
-      done: false,
-      name: 'Write Tutorial'
+    this.isomorphicInputElement = document.getElementsByTagName('input')[0]
+
+    // Simulate a click on the DOM element to check the checkbox
+    this.isomorphicInputElement.checked = true;
+  });
+
+  it('is checked before React mount', function() {
+    assert(this.isomorphicInputElement.checked === true);
+  });
+
+  describe('after React mount, <input>', function() {
+
+    before('mount React', function() {
+
+      // Create our component
+      this.component = TodoItemFactory({
+        done: false,
+        name: 'Write Tutorial'
+      });
+
+      // We want to render into the <body> tag
+      this.renderTarget = document.getElementsByTagName('body')[0];
+
+      // Now, render
+      this.renderedComponent = React.render(this.component, this.renderTarget);
+
+      // Searching for <input> tag within rendered React component
+      // Throws an exception if not found
+      this.inputComponent = TestUtils.findRenderedDOMComponentWithTag(
+        this.renderedComponent,
+        'input'
+      );
+
+      this.inputElement = this.inputComponent.getDOMNode();
     });
 
-    // We want to render into the <body> tag
-    var renderTarget = document.getElementsByTagName('body')[0];
+    it('should be checked', function() {
+      assert(this.inputElement.checked === true);
+    });
 
-    var renderedComponent = React.render(component, renderTarget);
+    it('should be identical DOM element', function() {
+      assert(this.inputElement === this.isomorphicInputElement);
+    });
 
-    // Searching for <input> tag within rendered React component
-    // Throws an exception if not found
-    var inputComponent = TestUtils.findRenderedDOMComponentWithTag(
-      renderedComponent,
-      'input'
-    );
-
-    this.inputElement = inputComponent.getDOMNode();
+    it('has checked state', function() {
+      assert(this.renderedComponent.state.done === true);
+    });
 
   });
-
-  it('<input> should be of type "checkbox"', function() {
-    assert(this.inputElement.getAttribute('type') === 'checkbox');
-  });
-
-})
+});
 ```
 
-## Results
+##### Results
 
 ```bash
 $ npm test
@@ -249,8 +430,12 @@ $ npm test
 
 
   Todo-item component
-    ✓ <input> should be of type "checkbox" 
+    ✓ is checked before React mount 
+    after React mount, <input>
+      ✓ should be checked 
+      ✓ should be identical DOM element 
+      ✓ has checked state 
 
 
-  1 passing (25ms)
+  4 passing (23ms)
 ```
